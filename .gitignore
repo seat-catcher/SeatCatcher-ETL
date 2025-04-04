@@ -14,3 +14,6 @@ wheels/
 
 # Pycharm
 .idea/
+
+# Response Data
+data/

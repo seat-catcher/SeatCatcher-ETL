@@ -2,8 +2,10 @@ import os
 import requests
 from urllib.parse import quote
 from dotenv import load_dotenv
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import logging
+import json
+
 
 from requests import Response
 
@@ -22,7 +24,8 @@ class StationInfoScraper:
     def __init__(self):
         logger.debug("[DEBUG] Initializing environment variables...")
         self.request_file_type = "json"
-        self.auth_key = os.getenv("SEOUL_OPENAPI_AUTH_KEY")
+        self.normal_auth_key = os.getenv("SEOUL_OPENAPI_AUTH_KEY")
+        self.realtime_auth_key = os.getenv("SEOUL_OPENAPI_REALTIME_AUTH_KEY")
         self.service_name = "SearchSTNBySubwayLineInfo"
 
     def build_url(
@@ -50,7 +53,7 @@ class StationInfoScraper:
 
             return (
                 f"{self.BASE_URL}/"
-                f"{self.auth_key}/{self.request_file_type}/{service_name}/"
+                f"{self.normal_auth_key}/{self.request_file_type}/{service_name}/"
                 f"{start_index}/{end_index}/"
                 f"{quote(query_params['station_code'])}/" # 한글 인코딩
                 f"{quote(query_params['station_name'])}/" # 한글 인코딩
@@ -69,7 +72,7 @@ class StationInfoScraper:
 
             return (
                 f"{self.BASE_URL}/"
-                f"{self.auth_key}/{self.request_file_type}/{service_name}/"
+                f"{self.normal_auth_key}/{self.request_file_type}/{service_name}/"
                 f"{start_index}/{end_index}/"
                 f"{quote(query_params['line_number'])}/"  # 한글 인코딩
                 f"{quote(query_params['station_name'])}/"  # 한글 인코딩
@@ -163,8 +166,26 @@ class StationInfoScraper:
                 f"# 축적 거리: {station.ACML_DIST}"
             )
 
+    def get_real_time_subway_arrival_data(self):
+        logger.debug("[DEBUG] Fetching real-time subway arrival data...")
+        url: str = f"http://swopenAPI.seoul.go.kr/api/subway/{self.realtime_auth_key}/json/realtimeStationArrival/0/5/숭실대입구(살피재)"
+        response: Response = requests.get(url)
+        logger.info(json.dumps(response.json(), indent=4, ensure_ascii=False))
+        return response.json()
+
+    def parse_real_time_subway_arrival_data(self, data: Dict[str, Any]):
+        logger.debug("[DEBUG] Parsing real-time subway arrival data...")
+        arrival_list: List = data['realtimeArrivalList']
+        logger.debug(json.dumps(arrival_list))
+        pass
+
 
 if __name__ == "__main__":
+    # Initialize
+    logger.info("[INFO] Starting the script...")
+    logger.debug("[DEBUG] Initializing the StationInfoScraper...")
+    scraper = StationInfoScraper()
+
     #############################################################
     # 01호선 최대 역 개수 : 102개 (1 ~ 102)
     # 02호선 최대 역 개수 : 51개 (1 ~ 51) // 2호선으로 검색 시 인천2호선이 포함됨 -> 서울로만 검색하려면 02호선으로 검색
@@ -179,20 +200,27 @@ if __name__ == "__main__":
     # 신분당선 최대 역 개수 : 16개 (1 ~ 16)
     # 공항철도 최대 역 개수 : 14개 (1 ~ 14)
     #############################################################
-    logger.info("[INFO] Starting the script...")
-    logger.debug("[DEBUG] Initializing the StationInfoScraper...")
-    scraper = StationInfoScraper()
-    request_result: Dict[str, Any] = scraper.get_train_station_info(start_index=1, end_index=400, line_number="공항철도")
-    logger.debug(f"[DEBUG] Result: {request_result}")
-    scraper.parse_train_station_info(request_result)
+    # for idx in range(1, 10):
+    #     request_result: Dict[str, Any] = scraper.get_train_station_info(start_index=1, end_index=400, line_number=f"0{idx}호선")
+    #     data = json.dumps(request_result, indent=4, ensure_ascii=False)
+    #     with open(f"./data/{idx}호선.json", "w", encoding="utf-8") as f:
+    #         f.write(data)
+    #     logger.debug(f"[DEBUG] Result: {data}")
+    #     scraper.parse_train_station_info(request_result)
 
     #############################################################
     # 역간 거리 정보의 경우
     # 1호선은 서울역 기준 -> 청량리 방면에 대한 정보만 제공됨 (대다수가 빠져있어서 활용 불가능할듯)
     # 2호선은 시청역 기준 -> 한양대 방면에 대한 정보만 제공됨 (시계방향 순환 응답)
     # 7호선은 장암역 기준 -> 온수역 방면에 대한 정보만 제공됨 (온수 이후부터는 없음 -> 직접 넣어야할듯)
+    # 9호선 아예 제공 안함
     #############################################################
-    request_result_2: Dict[str, Any] = scraper.get_distance_between_stations(start_index=1, end_index=100, subway_line_number="7", subway_station_name="")
-    scraper.parse_subway_distance_info(response=request_result_2)
+    for idx in range(1, 9):
+        request_result_2: Dict[str, Any] = scraper.get_distance_between_stations(start_index=1, end_index=100, subway_line_number=f"{idx}", subway_station_name="")
+        scraper.parse_subway_distance_info(response=request_result_2)
+
+    # request_result_3 = scraper.get_real_time_subway_arrival_data()
+    # scraper.parse_real_time_subway_arrival_data(request_result_3)
+
     logger.info("[INFO] Script finished.")
 
